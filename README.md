@@ -3,7 +3,7 @@ Strip reads from Oxford Nanopore FAST5 files if they meet certain criteria
 
 ## Getting Started
 
-Clone this repository:
+Clone this repository if you have not done so already:
 
 ```console
 git clone https://github.com/nodrogluap/nanostripper
@@ -14,7 +14,7 @@ This program is fairly simple but depends on [minimap2](https://github.com/lh3/m
 got [Oxford Nanopore's FAST5 API](https://github.com/nanoporetech/ont_fast5_api) installed in Python.
 
 If you have these requirements already, you are good to go.  If not, these requirements can be easily met with the 
-included (conda)[https://docs.conda.io/projects/conda/en/latest/user-guide/getting-started.html] environment like so:
+included [conda](https://docs.conda.io/projects/conda/en/latest/user-guide/getting-started.html) environment, with no administrator privileges required, like so:
 
 ```console
 conda env create -f nanostripper.yml
@@ -25,6 +25,8 @@ Then any time you want to run the program start with:
 ```console
 conda activate nanostripper
 ```
+
+Not using conda yet? Trust me, you should really try it.
 
 Given contemporary Oxford Nanopore FAST5 multi-read files, the basic usage of this software is like so:
 
@@ -48,7 +50,7 @@ as ``nanostripper_summary.txt`` in the same directory for informational and debu
 match neither the include nor exclude criteria are listed in the PAF file with their name and length, but the rest of the columns are dummy values (including 
 the 12th and last column, mapping quality, as 255 indicating unknown as per the PAF spec).
 
-For a FAST5 file of 4000 reads against SARS-CoV-2 and human it takes about 17 seconds when using 20 threads against a pre-built human minimap2 reference file (see below for threading and other options).
+For a FAST5 file of 4000 reads against SARS-CoV-2 and human it takes about 18 seconds on a modern CPU when using 20 threads against a pre-built human minimap2 reference file (see below for threading and other options).
 
 ## More options
 
