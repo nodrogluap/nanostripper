@@ -45,7 +45,7 @@ match criteria, and write the passed reads to ``stripped/my_base_called_nanopore
 ```
 
 This will produce a directory called ``stripped`` with the same files that you have given the program, but smaller as they have been stripped of the undesired reads.
-There is also a file giving the minimap2 match information (in [PAF format](https://github.com/lh3/miniasm/blob/master/PAF.md)) for the stripped reads is furnished
+There is also a file giving the minimap2 match information (in [PAF format](https://github.com/lh3/miniasm/blob/master/PAF.md)) for the stripped reads, furnished
 as ``nanostripper_summary.txt`` in the same directory for informational and debugging purposes.  Reads that 
 match neither the include nor exclude criteria are listed in the PAF file with their name and length, but the rest of the columns are dummy values (including 
 the 12th and last column, mapping quality, as 255 indicating unknown as per the PAF spec).
@@ -79,7 +79,7 @@ usage: nanostripper [-h] [-out OUT] [-t T] [-m M]
                  match (default: 20)
  ``` 
  
-Finally, the processing can be made fatsre by providing the minimap index for a FASTA file rather than the FASTA file itself.  The minimap2 index can be generated like so just once:
+Finally, the processing can be made faster by providing the minimap index for a FASTA file rather than the FASTA file itself.  The minimap2 index can be generated like so just once:
 
 ```console
 minimap2 -d hg38.mmi hg38.fa 
