@@ -1,0 +1,37 @@
+name: nanostripper
+channels:
+  - conda-forge
+  - r
+  - bioconda
+  - defaults
+dependencies:
+  - _libgcc_mutex=0.1=conda_forge
+  - _openmp_mutex=4.5=0_gnu
+  - bzip2=1.0.8=h516909a_2
+  - ca-certificates=2020.4.5.1=hecc5488_0
+  - certifi=2018.8.24=py35_1001
+  - libffi=3.2.1=he1b5a44_1007
+  - libgcc-ng=9.2.0=h24d8f2e_2
+  - libgomp=9.2.0=h24d8f2e_2
+  - libstdcxx-ng=9.2.0=hdf63c60_2
+  - minimap2=2.17=h8b12597_1
+  - ncurses=6.1=hf484d3e_1002
+  - openssl=1.0.2u=h516909a_0
+  - pip=20.0.2=py_2
+  - python=3.5.5=h5001a0f_2
+  - readline=7.0=hf8c457e_1001
+  - setuptools=40.4.3=py35_0
+  - sqlite=3.28.0=h8b20d00_0
+  - tk=8.6.10=hed695b0_0
+  - wheel=0.34.2=py_1
+  - xz=5.2.5=h516909a_0
+  - zlib=1.2.11=h516909a_1006
+  - pip:
+    - h5py==2.10.0
+    - numpy==1.18.3
+    - ont-fast5-api==3.1.1
+    - packaging==20.3
+    - pyparsing==2.4.7
+    - six==1.14.0
+    - progressbar33==2.3.1
+
