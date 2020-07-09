@@ -5,82 +5,161 @@ import os
 import sys
 import tempfile
 import subprocess
+import pandas as pd
+from pathlib import Path
 import h5py
 from ont_fast5_api.fast5_interface import get_fast5_file
 from ont_fast5_api.analysis_tools.basecall_1d import Basecall1DTools
+
+def str2bool(v):
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
+
+def dir_path(string):
+    if os.path.isdir(string):
+        return string
+    else:
+        raise NotADirectoryError(string)
 
 parser = argparse.ArgumentParser(description='Strip reads from Oxford Nanopore FAST5 files if/unless they meet certain reference match criteria using minimap2.')
 parser.add_argument('pos_ref_file', type=argparse.FileType('r'), 
 		    help='reference FastA DNA file for FAST5 inclusion using minimap2 (or a pre-built .mmi index)')
 parser.add_argument('neg_ref_file', type=argparse.FileType('r'), 
-		    help='reference FastA DNA file for FAST5 exclusion using minimap2 (or a pre-built .mmi index), override inclusion criterion')
-parser.add_argument('fast5_file', type=argparse.FileType('r'), nargs='+',
-                    help='a FAST5 file to process (must have basecalls already included)')
+		    help='reference FastA DNA file for FAST5 exclusion using minimap2 (or a pre-built .mmi index), overrides inclusion criterion')
+parser.add_argument('fast5_dir_name', type=dir_path, nargs='+',
+                    help='a directory of FAST5 files to recursively process (must have basecalls already included)')
 parser.add_argument('-out', default="stripped",
                     help='directory where modified FAST5 files will be written (default: "stripped")')
 parser.add_argument('-t', type=int, default=3,
                     help='number of threads to use for minimap2 (default: 3)')
+parser.add_argument('-demux', type=str2bool, nargs='?', const=True, default=False,
+                    help='demultiplex the data based on ONT barcodes using qcat (default: False)')
 parser.add_argument('-m', type=int, default=20,
                     help='minimum minimap2 mapping quality to consider an alignment as a match (default: 20)')
 args = parser.parse_args()
 
 if os.path.exists(args.out):
-	assert os.path.isdir(args.out), 'Output path exists but is not a directory'
+    assert os.path.isdir(args.out), 'Output path exists but is not a directory'
 else:
-        os.mkdir(args.out)
+    os.mkdir(args.out)
 summary_file = open(os.path.join(args.out, 'nanostripper_summary.txt'), 'w')
 
-for fast5_file in args.fast5_file: # Only really makes sense for multi-read files
-	# Check which reads in the files need to be removed
-	read_count = 0
-	read_lengths = {}
-	to_remove = {}
-	to_retain = {}
-	temp_fastq_file = tempfile.NamedTemporaryFile(delete=False, mode='w+t')
-	f5 = get_fast5_file(fast5_file.name, mode='r')
-	for read_id in f5.get_read_ids():
-		read = f5.get_read(read_id)
-		basecall = Basecall1DTools(read);
-		(name, sequence, quals) = basecall.get_called_sequence(section="template")
-		read_name = 'read_'+name.split()[0]
-		print('@'+read_name+'\n'+sequence+'\n+\n'+quals, file=temp_fastq_file)
-		read_lengths[read_name] = len(sequence)
-		#temp_fastq_file.write(basecall.get_called_sequence(section="template", fastq=True).encode('utf-8'))
-		read_count += 1
-	temp_fastq_file.close()
+for input_dir_name in args.fast5_dir_name: # Only really makes sense for multi-read files
+    sequencing_summary_files = Path(input_dir_name).rglob('*sequencing_summary.txt')
+    sequencing_summary_data_subsets = [pd.read_csv(os.path.join(input_dir_name, str(sequencing_summary_file.relative_to(input_dir_name))), sep='\t', header=0) for sequencing_summary_file in sequencing_summary_files]
+    sequencing_summary_data = pd.concat(sequencing_summary_data_subsets)
+    sequencing_summary_data['read_id'] = "read_" + sequencing_summary_data['read_id'] 
 
-	minimap2_paf_output = subprocess.check_output(['minimap2', '-x', 'map-ont', '-t', str(args.t), args.pos_ref_file.name, temp_fastq_file.name])
-	for line in minimap2_paf_output.splitlines():
-		values = line.decode('utf-8').split('\t')
-		read_id = values[0] # PAF formatted output from minimap2
-		if not read_id in to_retain and int(values[11]) >= args.m:
-			to_retain[read_id] = line  # Store the match info for the summary file
+    for fast5_file in Path(input_dir_name).rglob('*.fast5'):
+        demux_fastq_dir = tempfile.TemporaryDirectory(prefix="qcat_fastq")
+        # Check which reads in the files need to be removed
+        read_count = 0
+        read_lengths = {}
+        to_remove = {}
+        to_retain = {}
+        temp_fastq_file = tempfile.NamedTemporaryFile(delete=False, mode='w+t')
+        f5 = get_fast5_file(os.path.join(input_dir_name, str(fast5_file.relative_to(input_dir_name))), mode='r')
+        for read_id in f5.get_read_ids():
+        	read = f5.get_read(read_id)
+        	basecall = Basecall1DTools(read);
+        	(name, sequence, quals) = basecall.get_called_sequence(section="template")
+        	read_name = 'read_'+name.split()[0]
+        	print('@'+read_name+'\n'+sequence+'\n+\n'+quals, file=temp_fastq_file)
+        	read_lengths[read_name] = len(sequence)
+        	read_count += 1
+        temp_fastq_file.close()
 
-	minimap2_paf_output = subprocess.check_output(['minimap2', '-x', 'map-ont', '-t', str(args.t), args.neg_ref_file.name, temp_fastq_file.name])
-	for line in minimap2_paf_output.splitlines():
-		values = line.decode('utf-8').split('\t')
-		read_id = values[0]
-		if not read_id in to_remove and int(values[11]) >= args.m:
-			to_remove[read_id] = line  # Store the match info for the summary file
+        # Reuse for demux assignment the FASTQ file that was the query for mapping/filtering
+        read2barcode = {}
+        barcodes = ['all']
+        if args.demux:
+            temp_qcat_tsv_file = tempfile.NamedTemporaryFile(delete=False, mode='w+t')
+            subprocess.call(['qcat', '-f', temp_fastq_file.name, '--tsv', '--min-read-length', '0', '--trim', '-b', demux_fastq_dir.name], stdout=temp_qcat_tsv_file)
+            read2barcode = pd.read_csv(temp_qcat_tsv_file.name, sep='\t', header=0, usecols=['name','barcode'])
+            read2barcode = read2barcode.set_index('name')['barcode'].to_dict()
+            os.unlink(temp_qcat_tsv_file.name)
+            barcodes = set(read2barcode.values())
+        demux_fastq_dir.cleanup()
 
-	os.unlink(temp_fastq_file.name)
+        # Check the reference mapping
+        minimap2_paf_output = subprocess.check_output(['minimap2', '-x', 'map-ont', '-t', str(args.t), args.pos_ref_file.name, temp_fastq_file.name])
+        for line in minimap2_paf_output.splitlines():
+        	values = line.decode('utf-8').split('\t')
+        	read_id = values[0] # PAF formatted output from minimap2
+        	if not read_id in to_retain and int(values[11]) >= args.m:
+        		to_retain[read_id] = line  # Store the match info for the summary file
 
-	# Do the data copy for reads matching the criteria 
-	stripped_count = 0
-	fin = h5py.File(fast5_file.name, 'r')
-	fout = h5py.File(os.path.join(args.out, os.path.basename(fast5_file.name)), 'w')
-	for attr in fin.attrs:
-		fout.attrs[attr] = fin.attrs[attr]
-	for read in fin:
-		if read in to_remove: 
-			print(to_remove[read].decode('utf-8'), file=summary_file)
-			stripped_count += 1
-		elif read in to_retain: 
-			fin.copy(read, fout)
-		else:
-			print('\t'.join([read,str(read_lengths[read]),'0','1','+','*','0','0','1','0','0','255']), file=summary_file)
-			stripped_count += 1
+        minimap2_paf_output = subprocess.check_output(['minimap2', '-x', 'map-ont', '-t', str(args.t), args.neg_ref_file.name, temp_fastq_file.name])
+        for line in minimap2_paf_output.splitlines():
+        	values = line.decode('utf-8').split('\t')
+        	read_id = values[0]
+        	if not read_id in to_remove and int(values[11]) >= args.m:
+        		to_remove[read_id] = line  # Store the match info for the summary file
 
-	print("{}: stripped {}/{} reads".format(fast5_file.name, stripped_count, read_count), file=sys.stderr)
+        os.unlink(temp_fastq_file.name)
+
+        output_dir_name = os.path.join(args.out, os.path.basename(input_dir_name))
+        if not os.path.exists(output_dir_name):
+                print("{} output directory created".format(output_dir_name))
+                os.mkdir(output_dir_name)
+        # Do the data copy for reads matching the criteria 
+        stripped_count = 0
+        fin = h5py.File(os.path.join(input_dir_name, str(fast5_file.relative_to(input_dir_name))), 'r')
+        fout = {}
+        filtered_sequencing_summary_file = {}
+        if not sequencing_summary_data.empty:
+            filtered_sequencing_summary_data = sequencing_summary_data[sequencing_summary_data.read_id.isin(to_retain)].copy()
+        if args.demux:
+            if not sequencing_summary_data.empty:
+                filtered_sequencing_summary_data['barcode'] = filtered_sequencing_summary_data.read_id.map(read2barcode)
+            for barcode in barcodes:
+                output_barcode_dir_name = os.path.join(output_dir_name, barcode)
+                if not os.path.exists(output_barcode_dir_name):
+                    print("{} barcode output directory created".format(output_barcode_dir_name))
+                    os.mkdir(output_barcode_dir_name)
+                fout[barcode] = h5py.File(os.path.join(output_barcode_dir_name, fast5_file.name), 'w')
+
+                if not sequencing_summary_data.empty:
+                    filtered_sequencing_summary_filename = os.path.join(output_barcode_dir_name, "sequencing_summary.txt")
+                    # Subset the sequencing_summary.txt file for each barcode
+                    if not os.path.exists(filtered_sequencing_summary_filename) or not barcode in filtered_sequencing_summary_file:
+                        filtered_sequencing_summary_file[barcode] = open(filtered_sequencing_summary_filename, mode='w')
+                        filtered_sequencing_summary_file[barcode].write('\t'.join(sequencing_summary_data.columns) + '\n')
+                    barcode_filtered_sequencing_summary_data = filtered_sequencing_summary_data[filtered_sequencing_summary_data.barcode == barcode].drop(['barcode'], axis=1)
+                    barcode_filtered_sequencing_summary_data.replace("^read_", "", regex=True) 
+                    barcode_filtered_sequencing_summary_data.to_csv(filtered_sequencing_summary_file[barcode].name, sep="\t", mode='a', header=False, index=False)
+        else:
+            fout['all'] = h5py.File(os.path.join(output_dir_name, fast5_file.name), 'w')
+            if not sequencing_summary_data.empty:
+                filtered_sequencing_summary_filename = os.path.join(output_dir_name, "sequencing_summary.txt")
+                if not os.path.exists(filtered_sequencing_summary_filename) or not 'all' in filtered_sequencing_summary_file:
+                    filtered_sequencing_summary_file['all'] = open(filtered_sequencing_summary_filename, mode='w')
+                    filtered_sequencing_summary_file['all'].write('\t'.join(sequencing_summary_data.columns) + '\n')
+                filtered_sequence_summary_data.to_csv(filtered_sequencing_summary_file['all'].name, sep="\t", mode='a', header=False, index=False)
+
+
+        # Copy the filtered FAST5 data from the old to new file(s)
+        for barcode in barcodes:
+            for attr in fin.attrs:
+                fout[barcode].attrs[attr] = fin.attrs[attr]
+
+        for read in fin:
+        	if read in to_remove: 
+        		print(to_remove[read].decode('utf-8'), file=summary_file)
+        		stripped_count += 1
+        	elif read in to_retain: 
+                        barcode = read2barcode[read] if args.demux else 'all'
+       	                fin.copy(read, fout[barcode])
+        	else:
+        		print('\t'.join([read,str(read_lengths[read]),'0','1','+','*','0','0','1','0','0','255']), file=summary_file)
+        		stripped_count += 1
+
+        print("{}: stripped {}/{} reads".format(fin.filename, stripped_count, read_count), file=sys.stderr)
 
 summary_file.close()
