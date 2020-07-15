@@ -53,8 +53,10 @@ summary_file = open(os.path.join(args.out, 'nanostripper_summary.txt'), 'w')
 for input_dir_name in args.fast5_dir_name: # Only really makes sense for multi-read files
     sequencing_summary_files = Path(input_dir_name).rglob('*sequencing_summary.txt')
     sequencing_summary_data_subsets = [pd.read_csv(os.path.join(input_dir_name, str(sequencing_summary_file.relative_to(input_dir_name))), sep='\t', header=0) for sequencing_summary_file in sequencing_summary_files]
-    sequencing_summary_data = pd.concat(sequencing_summary_data_subsets)
-    sequencing_summary_data['read_id'] = "read_" + sequencing_summary_data['read_id'] 
+    sequencing_summary_data = pd.DataFrame()
+    if sequencing_summary_data_subsets:
+      sequencing_summary_data = pd.concat(sequencing_summary_data_subsets)
+      sequencing_summary_data['read_id'] = "read_" + sequencing_summary_data['read_id'] 
 
     for fast5_file in Path(input_dir_name).rglob('*.fast5'):
         demux_fastq_dir = tempfile.TemporaryDirectory(prefix="qcat_fastq")
@@ -141,7 +143,7 @@ for input_dir_name in args.fast5_dir_name: # Only really makes sense for multi-r
                 if not os.path.exists(filtered_sequencing_summary_filename) or not 'all' in filtered_sequencing_summary_file:
                     filtered_sequencing_summary_file['all'] = open(filtered_sequencing_summary_filename, mode='w')
                     filtered_sequencing_summary_file['all'].write('\t'.join(sequencing_summary_data.columns) + '\n')
-                filtered_sequence_summary_data.to_csv(filtered_sequencing_summary_file['all'].name, sep="\t", mode='a', header=False, index=False)
+                filtered_sequencing_summary_data.to_csv(filtered_sequencing_summary_file['all'].name, sep="\t", mode='a', header=False, index=False)
 
 
         # Copy the filtered FAST5 data from the old to new file(s)
