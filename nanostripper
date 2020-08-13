@@ -27,6 +27,9 @@ def dir_path(string):
     else:
         raise NotADirectoryError(string)
 
+def remove_prefix(text, prefix):
+    return text[text.startswith(prefix) and len(prefix):]
+
 parser = argparse.ArgumentParser(description='Strip reads from Oxford Nanopore FAST5 files if/unless they meet certain reference match criteria using minimap2.')
 parser.add_argument('pos_ref_file', type=argparse.FileType('r'), 
 		    help='reference FastA DNA file for FAST5 inclusion using minimap2 (or a pre-built .mmi index)')
@@ -38,6 +41,8 @@ parser.add_argument('-out', default="stripped",
                     help='directory where modified FAST5 files will be written (default: "stripped")')
 parser.add_argument('-t', type=int, default=3,
                     help='number of threads to use for minimap2 (default: 3)')
+parser.add_argument('-fastq', type=str2bool, nargs='?', const=True, default=False,
+                    help='output stripped FASTQ files as well (default: False)')
 parser.add_argument('-demux', type=str2bool, nargs='?', const=True, default=False,
                     help='demultiplex the data based on ONT barcodes using qcat (default: False)')
 parser.add_argument('-m', type=int, default=20,
@@ -115,6 +120,7 @@ for input_dir_name in args.fast5_dir_name: # Only really makes sense for multi-r
         fin = h5py.File(os.path.join(input_dir_name, str(fast5_file.relative_to(input_dir_name))), 'r')
         fout = {}
         filtered_sequencing_summary_file = {}
+        filtered_fastq_file = {}
         if not sequencing_summary_data.empty:
             filtered_sequencing_summary_data = sequencing_summary_data[sequencing_summary_data.read_id.isin(to_retain)].copy()
         if args.demux:
@@ -122,10 +128,18 @@ for input_dir_name in args.fast5_dir_name: # Only really makes sense for multi-r
                 filtered_sequencing_summary_data['barcode'] = filtered_sequencing_summary_data.read_id.map(read2barcode)
             for barcode in barcodes:
                 output_barcode_dir_name = os.path.join(output_dir_name, barcode)
+                output_barcode_fastq_dir_name = os.path.join(output_barcode_dir_name, 'fastq')
                 if not os.path.exists(output_barcode_dir_name):
                     print("{} barcode output directory created".format(output_barcode_dir_name))
                     os.mkdir(output_barcode_dir_name)
                 fout[barcode] = h5py.File(os.path.join(output_barcode_dir_name, fast5_file.name), 'w')
+
+                if args.fastq:
+                    if not os.path.exists(output_barcode_fastq_dir_name):
+                        os.mkdir(output_barcode_fastq_dir_name);
+                    filtered_fastq_filename = os.path.join(output_barcode_fastq_dir_name, barcode+'.pass_filter.fastq')
+                    if not os.path.exists(filtered_fastq_filename) or not barcode in filtered_fastq_file:
+                        filtered_fastq_file[barcode] = open(filtered_fastq_filename, mode='w')
 
                 if not sequencing_summary_data.empty:
                     filtered_sequencing_summary_filename = os.path.join(output_barcode_dir_name, "sequencing_summary.txt")
@@ -138,6 +152,13 @@ for input_dir_name in args.fast5_dir_name: # Only really makes sense for multi-r
                     barcode_filtered_sequencing_summary_data.to_csv(filtered_sequencing_summary_file[barcode].name, sep="\t", mode='a', header=False, index=False)
         else:
             fout['all'] = h5py.File(os.path.join(output_dir_name, fast5_file.name), 'w')
+            if args.fastq:
+                output_fastq_dir_name = os.path.join(output_dir_name, 'fastq')
+                if not os.path.exists(output_fastq_dir_name):
+                    os.mkdir(output_fastq_dir_name);
+                filtered_fastq_filename = os.path.join(output_fastq_dir_name, 'pass_filter.fastq')
+                if not os.path.exists(filtered_fastq_filename) or not 'all' in filtered_fastq_file:
+                    filtered_fastq_file['all'] = open(filtered_fastq_filename, mode='w')
             if not sequencing_summary_data.empty:
                 filtered_sequencing_summary_filename = os.path.join(output_dir_name, "sequencing_summary.txt")
                 if not os.path.exists(filtered_sequencing_summary_filename) or not 'all' in filtered_sequencing_summary_file:
@@ -158,6 +179,10 @@ for input_dir_name in args.fast5_dir_name: # Only really makes sense for multi-r
         	elif read in to_retain: 
                         barcode = read2barcode[read] if args.demux else 'all'
        	                fin.copy(read, fout[barcode])
+                        orig_read_name = remove_prefix(read, "read_") # no read_ prefix in original FASTQ, just the sequencing summary 
+                        basecall = Basecall1DTools(f5.get_read(orig_read_name));
+                        (name, sequence, quals) = basecall.get_called_sequence(section="template")
+                        print('@'+name+'\n'+sequence+'\n+\n'+quals, file=filtered_fastq_file[barcode])
         	else:
         		print('\t'.join([read,str(read_lengths[read]),'0','1','+','*','0','0','1','0','0','255']), file=summary_file)
         		stripped_count += 1
