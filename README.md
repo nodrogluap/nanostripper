@@ -134,7 +134,10 @@ total 172216
 
 ## More options
 
-The three main options that can be given are listed in the program help, which can be accessed using ``nanostripper -h``:
+In addition to exporting the pass filter FAST5 records, nanostripper can also be asked to output the pass filter FASTQ data for your convenience (rather than needing to use poretools or another program to do the FAST5->FASTQ extraction). Sinply add ``-fastq`` to the command invocation. A ``fastq`` directory will be created under each FAST5 output directory.
+
+
+The three other options that can be given are listed in the program help, which can be accessed using ``nanostripper -h``:
 
 ```
 usage: nanostripper [-h] [-out OUT] [-t T] [-m M]
