@@ -134,29 +134,38 @@ total 172216
 
 ## More options
 
-The three main options that can be given are listed in the program help, which can be accessed using ``nanostripper -h``:
+In addition to exporting the pass filter FAST5 records, nanostripper can also be asked to output the pass filter FASTQ data for your convenience (rather than needing to use poretools or another program to do the FAST5->FASTQ extraction). Simply add ``-fastq`` to the command invocation. A ``fastq`` directory will be created under each FAST5 output directory.
+
+
+The three other options that can be given are listed in the program help, which can be accessed using ``nanostripper -h``:
 
 ```
-usage: nanostripper [-h] [-out OUT] [-t T] [-m M]
-                     pos_ref_file neg_ref_file fast5_file [fast5_file ...]
- 
- Strip reads from Oxford Nanopore FAST5 files if/unless they meet certain
- reference match criteria using minimap2.
- 
- positional arguments:
-   pos_ref_file  reference FastA DNA file for FAST5 inclusion using minimap2
-                 (or a pre-built .mmi index)
-   neg_ref_file  reference FastA DNA file for FAST5 exclusion using minimap2
-                 (or a pre-built .mmi index), override inclusion criterion
-   fast5_file    a FAST5 file to process (must have basecalls already included)
- 
- optional arguments:
-   -h, --help    show this help message and exit
-   -out OUT      directory where modified FAST5 files will be written (default:
-                 "stripped")
-   -t T          number of threads to use for minimap2 (default: 3)
-   -m M          minimum minimap2 mapping quality to consider an alignment as a
-                 match (default: 20)
+usage: nanostripper [-h] [-out OUT] [-t T] [-fastq [FASTQ]] [-demux [DEMUX]]
+                    [-m M]
+                    pos_ref_file neg_ref_file fast5_dir_name
+                    [fast5_dir_name ...]
+
+Strip reads from Oxford Nanopore FAST5 files if/unless they meet certain
+reference match criteria using minimap2.
+
+positional arguments:
+  pos_ref_file    reference FastA DNA file for FAST5 inclusion using minimap2
+                  (or a pre-built .mmi index)
+  neg_ref_file    reference FastA DNA file for FAST5 exclusion using minimap2
+                  (or a pre-built .mmi index), overrides inclusion criterion
+  fast5_dir_name  a directory of FAST5 files to recursively process (must have
+                  basecalls already included)
+
+optional arguments:
+  -h, --help      show this help message and exit
+  -out OUT        directory where modified FAST5 files will be written
+                  (default: "stripped")
+  -t T            number of threads to use for minimap2 (default: 3)
+  -fastq [FASTQ]  output stripped FASTQ files as well (default: False)
+  -demux [DEMUX]  demultiplex the data based on ONT barcodes using qcat
+                  (default: False)
+  -m M            minimum minimap2 mapping quality to consider an alignment as
+                  a match (default: 20)
  ``` 
  
 Finally, the processing can be made faster by providing the minimap index for a FASTA file rather than the FASTA file itself.  The minimap2 index can be generated like so just once:
