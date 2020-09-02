@@ -46,7 +46,10 @@ parser.add_argument('-fastq', type=str2bool, nargs='?', const=True, default=Fals
 parser.add_argument('-demux', type=str2bool, nargs='?', const=True, default=False,
                     help='demultiplex the data based on ONT barcodes using qcat (default: False)')
 parser.add_argument('-m', type=int, default=20,
-                    help='minimum minimap2 mapping quality to consider an alignment as a match (default: 20)')
+                    help='minimum minimap2 mapping quality to consider an alignment as a match for inclusion fasta reference (default: 20)')
+parser.add_argument('-r', type=int, default=20,
+                    help='minimum minimap2 mapping quality to consider an alignment as a match for exclusion fasta reference (default: 20)')
+
 args = parser.parse_args()
 
 if os.path.exists(args.out):
@@ -106,7 +109,7 @@ for input_dir_name in args.fast5_dir_name: # Only really makes sense for multi-r
         for line in minimap2_paf_output.splitlines():
         	values = line.decode('utf-8').split('\t')
         	read_id = values[0]
-        	if not read_id in to_remove and int(values[11]) >= args.m:
+        	if not read_id in to_remove and int(values[11]) >= args.r:
         		to_remove[read_id] = line  # Store the match info for the summary file
 
         os.unlink(temp_fastq_file.name)
