@@ -32,9 +32,9 @@ def remove_prefix(text, prefix):
 
 parser = argparse.ArgumentParser(description='Strip reads from Oxford Nanopore FAST5 files if/unless they meet certain reference match criteria using minimap2.')
 parser.add_argument('pos_ref_file', type=argparse.FileType('r'), 
-		    help='reference FastA DNA file for FAST5 inclusion using minimap2 (or a pre-built .mmi index)')
+		    help='reference FastA DNA file for FAST5 inclusion using minimap2 (or a pre-built .mmi index), if none specify /dev/null on *nix/Mac, nul on Windows')
 parser.add_argument('neg_ref_file', type=argparse.FileType('r'), 
-		    help='reference FastA DNA file for FAST5 exclusion using minimap2 (or a pre-built .mmi index), overrides inclusion criterion')
+		    help='reference FastA DNA file for FAST5 exclusion using minimap2 (or a pre-built .mmi index), overrides inclusion criterion. If none specify /dev/null on *nix/Mac, nul on Windows')
 parser.add_argument('fast5_dir_name', type=dir_path, nargs='+',
                     help='a directory of FAST5 files to recursively process (must have basecalls already included)')
 parser.add_argument('-out', default="stripped",
@@ -49,6 +49,8 @@ parser.add_argument('-m', type=int, default=20,
                     help='minimum minimap2 mapping quality to consider an alignment as a match for inclusion fasta reference (default: 20)')
 parser.add_argument('-r', type=int, default=20,
                     help='minimum minimap2 mapping quality to consider an alignment as a match for exclusion fasta reference (default: 20)')
+parser.add_argument('-verbose', type=str2bool, nargs='?', const=True, default=False,
+                    help='provide verbose output to standard error (default: False)')
 
 args = parser.parse_args()
 
@@ -97,26 +99,38 @@ for input_dir_name in args.fast5_dir_name: # Only really makes sense for multi-r
             barcodes = set(read2barcode.values())
         demux_fastq_dir.cleanup()
 
-        # Check the reference mapping
-        minimap2_paf_output = subprocess.check_output(['minimap2', '-x', 'map-ont', '-t', str(args.t), args.pos_ref_file.name, temp_fastq_file.name])
-        for line in minimap2_paf_output.splitlines():
-        	values = line.decode('utf-8').split('\t')
-        	read_id = values[0] # PAF formatted output from minimap2
-        	if not read_id in to_retain and int(values[11]) >= args.m:
-        		to_retain[read_id] = line  # Store the match info for the summary file
+        # Check the inclusion reference mapping (if not undefined)
+        if args.pos_ref_file.name != os.devnull:
+       	    minimap2_paf_output = subprocess.check_output(['minimap2', '-x', 'map-ont', '-t', str(args.t), args.pos_ref_file.name, temp_fastq_file.name])
+       	    for line in minimap2_paf_output.splitlines():
+                values = line.decode('utf-8').split('\t')
+                read_id = values[0] # PAF formatted output from minimap2
+                if not read_id in to_retain and int(values[11]) >= args.m:
+       	            to_retain[read_id] = line  # Store the match info for the summary file
+        else:
+            # Keep everything by default, as no positive selection criterium was given
+            to_retain = ['read_'+s for s in f5.get_read_ids()]
 
-        minimap2_paf_output = subprocess.check_output(['minimap2', '-x', 'map-ont', '-t', str(args.t), args.neg_ref_file.name, temp_fastq_file.name])
-        for line in minimap2_paf_output.splitlines():
-        	values = line.decode('utf-8').split('\t')
-        	read_id = values[0]
-        	if not read_id in to_remove and int(values[11]) >= args.r:
-        		to_remove[read_id] = line  # Store the match info for the summary file
+	# Check the exclusion reference mapping (if not undefined)
+        if args.neg_ref_file.name != os.devnull:
+       	    minimap2_paf_output = subprocess.check_output(['minimap2', '-x', 'map-ont', '-t', str(args.t), args.neg_ref_file.name, temp_fastq_file.name])
+       	    for line in minimap2_paf_output.splitlines():
+                values = line.decode('utf-8').split('\t')
+                read_id = values[0]
+                if not read_id in to_remove and int(values[11]) >= args.r:
+                    to_remove[read_id] = line  # Store the match info for the summary file
+        else:
+            if args.verbose: 
+                if args.pos_ref_file.name != os.devnull:
+                    print("Skipping only non-positive mapping reads by default (a null negative selection criterion was specified on the command line)", file=sys.stderr)
+                else:
+                    print("Keeping all reads as null positive and negative selection criteria were specified on the command line.", file=sys.stderr)
 
         os.unlink(temp_fastq_file.name)
 
         output_dir_name = os.path.join(args.out, os.path.basename(input_dir_name))
         if not os.path.exists(output_dir_name):
-                print("{} output directory created".format(output_dir_name))
+                if args.verbose: print("{} output directory created".format(output_dir_name), file=sys.stderr)
                 os.mkdir(output_dir_name)
         # Do the data copy for reads matching the criteria 
         stripped_count = 0
@@ -133,7 +147,7 @@ for input_dir_name in args.fast5_dir_name: # Only really makes sense for multi-r
                 output_barcode_dir_name = os.path.join(output_dir_name, barcode)
                 output_barcode_fastq_dir_name = os.path.join(output_barcode_dir_name, 'fastq')
                 if not os.path.exists(output_barcode_dir_name):
-                    print("{} barcode output directory created".format(output_barcode_dir_name))
+                    if args.verbose: print("{} barcode output directory created".format(output_barcode_dir_name), file=sys.stderr)
                     os.mkdir(output_barcode_dir_name)
                 fout[barcode] = h5py.File(os.path.join(output_barcode_dir_name, fast5_file.name), 'w')
 
@@ -185,11 +199,11 @@ for input_dir_name in args.fast5_dir_name: # Only really makes sense for multi-r
                         orig_read_name = remove_prefix(read, "read_") # no read_ prefix in original FASTQ, just the sequencing summary 
                         basecall = Basecall1DTools(f5.get_read(orig_read_name));
                         (name, sequence, quals) = basecall.get_called_sequence(section="template")
-                        print('@'+name+'\n'+sequence+'\n+\n'+quals, file=filtered_fastq_file[barcode])
+                        if args.fastq: print('@'+name+'\n'+sequence+'\n+\n'+quals, file=filtered_fastq_file[barcode])
         	else:
         		print('\t'.join([read,str(read_lengths[read]),'0','1','+','*','0','0','1','0','0','255']), file=summary_file)
         		stripped_count += 1
 
-        print("{}: stripped {}/{} reads".format(fin.filename, stripped_count, read_count), file=sys.stderr)
+        if args.verbose: print("{}: stripped {}/{} reads".format(fin.filename, stripped_count, read_count), file=sys.stderr)
 
 summary_file.close()
