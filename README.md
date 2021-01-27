@@ -38,7 +38,7 @@ The program will extract the basecalls from the FAST5, run them using
 minimap2 against the inclusion and exclusion (which overrides) reference FASTA file 
 match criteria, and write the passed reads to ``stripped/my_base_called_nanopore_data_fileX.fast5``. For example to include only reads that map to the 
 [SARS-CoV-2 genome](https://www.ncbi.nlm.nih.gov/nuccore/NC_045512), but not the [human genome](https://www.ncbi.nlm.nih.gov/assembly/GCF_000001405.26/) 
-(e.g. a chimeric read from errant ligation during nanopre sample prep) at a bare minimum:
+(e.g. a chimeric read from errant ligation during nanopore sample prep) at a bare minimum:
 
 
 ```console
