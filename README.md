@@ -134,6 +134,8 @@ total 172216
 
 ## More options
 
+To use nanostripper to just demultiplex FAST5 or FASTQ files, you can use /dev/null (Linux) or nul (Windows) as the strip criteria instead of FastA files.
+
 In addition to exporting the pass filter FAST5 records, nanostripper can also be asked to output the pass filter FASTQ data for your convenience (rather than needing to use poretools or another program to do the FAST5->FASTQ extraction). Simply add ``-fastq`` to the command invocation. A ``fastq`` directory will be created under each FAST5 output directory.
 
 
